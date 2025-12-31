@@ -36,6 +36,7 @@ export function WorkerAttendance() {
         try {
             if (!isCheckedIn) {
                 await clockIn(user.id)
+                await fetchRecords() // Sync state
                 setSuccessModal({
                     isOpen: true,
                     type: 'check-in',
@@ -43,7 +44,12 @@ export function WorkerAttendance() {
                     date: format(new Date(), "EEEE, d 'de' MMMM", { locale: es })
                 })
             } else if (!isCheckedOut) {
+                if (!todayRecord?.id) {
+                    console.error('No record ID found!')
+                    return
+                }
                 await clockOut(todayRecord!.id)
+                await fetchRecords() // Sync state to ensure UI updates
 
                 let durationStr = '';
                 if (todayRecord?.checkIn) {
@@ -64,6 +70,7 @@ export function WorkerAttendance() {
                 })
             }
         } catch (e) {
+            console.error('Error in handleAction:', e)
             alert('Error al registrar asistencia. Intente nuevamente.')
         }
     }
