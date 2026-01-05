@@ -9,6 +9,8 @@ export interface AttendanceRecord {
     date: string // YYYY-MM-DD
     checkIn: string // ISO string
     checkOut?: string // ISO string
+    breakStart?: string // ISO string
+    breakEnd?: string // ISO string
     status: 'present' | 'late' | 'absent'
 }
 
@@ -20,6 +22,8 @@ interface AttendanceState {
     isLoading: boolean
     clockIn: (employeeId: string) => Promise<any>
     clockOut: (recordId: string) => Promise<any>
+    startBreak: (recordId: string) => Promise<any>
+    endBreak: (recordId: string) => Promise<any>
     fetchRecords: () => Promise<void>
     fetchAttendance: (userId?: string) => Promise<void>
     updateRecord: (id: string, updates: Partial<AttendanceRecord>) => Promise<void>
@@ -46,6 +50,8 @@ export const useAttendanceStore = create<AttendanceState>()(
                         date: typeof r.fecha === 'string' ? r.fecha.substring(0, 10) : r.fecha,
                         checkIn: r.horaEntrada,
                         checkOut: r.horaSalida,
+                        breakStart: r.inicioBreak,
+                        breakEnd: r.finBreak,
                         status: (r.estado === 'Presente' ? 'present' : r.estado === 'Tarde' ? 'late' : 'absent')
                     }));
                     set({ records, isLoading: false });
@@ -80,6 +86,8 @@ export const useAttendanceStore = create<AttendanceState>()(
                         date: typeof r.fecha === 'string' ? r.fecha.substring(0, 10) : r.fecha,
                         checkIn: r.horaEntrada,
                         checkOut: r.horaSalida,
+                        breakStart: r.inicioBreak,
+                        breakEnd: r.finBreak,
                         status: (r.estado === 'Presente' ? 'present' : r.estado === 'Tarde' ? 'late' : 'absent')
                     };
 
@@ -113,6 +121,44 @@ export const useAttendanceStore = create<AttendanceState>()(
                     throw e;
                 }
             },
+            startBreak: async (recordId) => {
+                try {
+                    const now = new Date().toISOString();
+                    // Assuming backend field is 'inicioBreak' to match standard naming conventions seen in fetchRecords
+                    const r = await api.patch(`/attendance/${recordId}`, { inicioBreak: now });
+
+                    set(state => ({
+                        records: state.records.map(rec =>
+                            rec.id === recordId
+                                ? { ...rec, breakStart: now } // Optimistic update if r doesn't have it, or use r.inicioBreak
+                                : rec
+                        )
+                    }));
+                    return r;
+                } catch (e) {
+                    console.error(e);
+                    throw e;
+                }
+            },
+            endBreak: async (recordId) => {
+                try {
+                    const now = new Date().toISOString();
+                    // Assuming backend field is 'finBreak'
+                    const r = await api.patch(`/attendance/${recordId}`, { finBreak: now });
+
+                    set(state => ({
+                        records: state.records.map(rec =>
+                            rec.id === recordId
+                                ? { ...rec, breakEnd: now }
+                                : rec
+                        )
+                    }));
+                    return r;
+                } catch (e) {
+                    console.error(e);
+                    throw e;
+                }
+            },
 
             // Legacy/Helper wrappers
             addRecord: (_r: any) => { },
@@ -121,6 +167,8 @@ export const useAttendanceStore = create<AttendanceState>()(
                     const payload: any = {};
                     if (updates.checkIn) payload.horaEntrada = updates.checkIn;
                     if (updates.checkOut) payload.horaSalida = updates.checkOut;
+                    if (updates.breakStart) payload.inicioBreak = updates.breakStart;
+                    if (updates.breakEnd) payload.finBreak = updates.breakEnd;
                     if (updates.status) {
                         const statusMap: Record<string, string> = {
                             'present': 'Presente',
@@ -166,3 +214,4 @@ export const useAttendanceStore = create<AttendanceState>()(
         }
     )
 )
+

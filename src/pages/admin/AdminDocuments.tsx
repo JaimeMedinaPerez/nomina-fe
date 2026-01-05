@@ -2,7 +2,7 @@ import { useDocumentStore } from '@/store/documents-store'
 import { useEmployeeStore } from '@/store/employee-store'
 import { api } from '@/lib/api'
 import { FileText, Upload, Trash2, Download, Search, File, User } from 'lucide-react'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 
 export function AdminDocuments() {
     const { documents, fetchDocuments, addDocument, deleteDocument } = useDocumentStore()
@@ -17,7 +17,10 @@ export function AdminDocuments() {
     const [searchTerm, setSearchTerm] = useState('')
     const [isUploadModalOpen, setIsUploadModalOpen] = useState(false)
     const [errorModalOpen, setErrorModalOpen] = useState(false)
+
     const [errorMessage, setErrorMessage] = useState('')
+    const [selectedFile, setSelectedFile] = useState<File | null>(null)
+    const fileInputRef = useRef<HTMLInputElement>(null)
 
     // Upload Form State
     const [uploadForm, setUploadForm] = useState({
@@ -46,18 +49,32 @@ export function AdminDocuments() {
             ownerName = emp?.name
         }
 
+
+
+        if (!selectedFile) {
+            alert("Por favor selecciona un archivo");
+            return;
+        }
+
         addDocument({
             title: uploadForm.title,
             type: uploadForm.type,
-            url: '#', // Mock URL
-            size: (Math.random() * 5 + 1).toFixed(1) + ' MB',
+            url: '', // Backend will generate
+            size: '', // Backend will generate
             uploadedBy: 'admin',
             ownerId: uploadForm.target === 'global' ? undefined : uploadForm.target,
             ownerName: ownerName
-        })
+        }, selectedFile)
 
         setIsUploadModalOpen(false)
         setUploadForm({ title: '', type: 'policy', target: 'global' })
+        setSelectedFile(null)
+    }
+
+    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files[0]) {
+            setSelectedFile(e.target.files[0])
+        }
     }
 
     const handleDownload = async (doc: any) => {
@@ -240,10 +257,23 @@ export function AdminDocuments() {
                                     </select>
                                 </div>
 
-                                <div className="border-2 border-dashed border-indigo-500/30 rounded-lg p-6 text-center hover:bg-indigo-500/5 transition-colors cursor-pointer group">
+                                <div
+                                    onClick={() => fileInputRef.current?.click()}
+                                    className="border-2 border-dashed border-indigo-500/30 rounded-lg p-6 text-center hover:bg-indigo-500/5 transition-colors cursor-pointer group"
+                                >
+                                    <input
+                                        type="file"
+                                        ref={fileInputRef}
+                                        className="hidden"
+                                        onChange={handleFileSelect}
+                                    />
                                     <Upload className="mx-auto text-indigo-400 mb-2 group-hover:scale-110 transition-transform" size={24} />
-                                    <span className="text-sm text-indigo-300">Arrastra un archivo o haz clic para subir</span>
-                                    <p className="text-xs text-indigo-400/50 mt-1">PDF, DOCX, JPG (Max 5MB)</p>
+                                    <span className="text-sm text-indigo-300">
+                                        {selectedFile ? selectedFile.name : 'Arrastra un archivo o haz clic para subir'}
+                                    </span>
+                                    <p className="text-xs text-indigo-400/50 mt-1">
+                                        {selectedFile ? `${(selectedFile.size / 1024 / 1024).toFixed(2)} MB` : 'PDF, DOCX, JPG (Max 5MB)'}
+                                    </p>
                                 </div>
 
                                 <div className="flex justify-end gap-3 pt-4">
