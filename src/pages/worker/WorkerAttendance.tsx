@@ -89,7 +89,16 @@ export function WorkerAttendance() {
                 if (todayRecord?.checkIn) {
                     const checkInTime = new Date(todayRecord.checkIn).getTime();
                     const checkOutTime = new Date().getTime();
-                    const diffMs = checkOutTime - checkInTime;
+                    let diffMs = checkOutTime - checkInTime;
+
+                    // Subtract Break Time if applicable
+                    if (todayRecord.breakStart && todayRecord.breakEnd) {
+                        const breakStart = new Date(todayRecord.breakStart).getTime();
+                        const breakEnd = new Date(todayRecord.breakEnd).getTime();
+                        const breakDuration = breakEnd - breakStart;
+                        diffMs -= breakDuration;
+                    }
+
                     const hours = Math.floor(diffMs / (1000 * 60 * 60));
                     const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
                     durationStr = `${hours}h ${minutes}m`;

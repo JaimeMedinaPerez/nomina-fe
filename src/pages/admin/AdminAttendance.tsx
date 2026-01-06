@@ -126,6 +126,7 @@ export function AdminAttendance() {
                                 <th className="px-4 py-3 text-[10px] font-semibold text-indigo-300 uppercase tracking-wider">Fecha</th>
                                 <th className="px-4 py-3 text-[10px] font-semibold text-indigo-300 uppercase tracking-wider">Entrada</th>
                                 <th className="px-4 py-3 text-[10px] font-semibold text-indigo-300 uppercase tracking-wider">Salida</th>
+                                <th className="px-4 py-3 text-[10px] font-semibold text-indigo-300 uppercase tracking-wider">Horas Trabajadas</th>
                                 <th className="px-4 py-3 text-[10px] font-semibold text-indigo-300 uppercase tracking-wider">Estado</th>
                                 <th className="px-4 py-3 text-[10px] font-semibold text-indigo-300 uppercase tracking-wider text-right">Acciones</th>
                             </tr>
@@ -133,43 +134,66 @@ export function AdminAttendance() {
                         <tbody className="divide-y divide-border">
                             {currentRecords.length === 0 ? (
                                 <tr>
-                                    <td colSpan={6} className="px-4 py-12 text-center text-indigo-300/50 text-xs">
+                                    <td colSpan={7} className="px-4 py-12 text-center text-indigo-300/50 text-xs">
                                         No hay registros encontrados.
                                     </td>
                                 </tr>
                             ) : (
-                                currentRecords.map((record) => (
-                                    <tr key={record.id} className="hover:bg-muted/30 transition-colors group">
-                                        <td className="px-4 py-2.5 font-medium text-indigo-200 text-xs">{record.userName}</td>
-                                        <td className="px-4 py-2.5 text-indigo-200/70 text-xs">{record.date}</td>
-                                        <td className="px-4 py-2.5 text-indigo-200 text-xs">
-                                            {format(parseISO(record.checkIn), 'HH:mm')}
-                                        </td>
-                                        <td className="px-4 py-2.5 text-indigo-200/70 text-xs">
-                                            {record.checkOut ? format(parseISO(record.checkOut), 'HH:mm') : '-'}
-                                        </td>
-                                        <td className="px-4 py-2.5">
-                                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium capitalize border ${record.status === 'present'
-                                                ? 'bg-green-500/10 text-green-400 border-green-500/20'
-                                                : record.status === 'late'
-                                                    ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20'
-                                                    : 'bg-red-500/10 text-red-400 border-red-500/20'
-                                                }`}>
-                                                {record.status === 'present' ? 'Puntual' :
-                                                    record.status === 'late' ? 'Tarde' : 'Ausente'}
-                                            </span>
-                                        </td>
-                                        <td className="px-4 py-2.5 text-right">
-                                            <button
-                                                onClick={() => handleEditClick(record)}
-                                                className="p-1.5 text-indigo-400 hover:text-white hover:bg-indigo-500/20 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
-                                                title="Editar Horas"
-                                            >
-                                                <Edit2 size={14} />
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))
+                                currentRecords.map((record) => {
+                                    // Calculate Net Worked Hours
+                                    let netDuration = '---';
+                                    if (record.checkIn && record.checkOut) {
+                                        const start = new Date(record.checkIn).getTime();
+                                        const end = new Date(record.checkOut).getTime();
+                                        let diff = end - start;
+
+                                        if (record.breakStart && record.breakEnd) {
+                                            const breakStart = new Date(record.breakStart).getTime();
+                                            const breakEnd = new Date(record.breakEnd).getTime();
+                                            diff -= (breakEnd - breakStart);
+                                        }
+
+                                        const hours = Math.floor(diff / (1000 * 60 * 60));
+                                        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+                                        netDuration = `${hours}h ${minutes}m`;
+                                    }
+
+                                    return (
+                                        <tr key={record.id} className="hover:bg-muted/30 transition-colors group">
+                                            <td className="px-4 py-2.5 font-medium text-indigo-200 text-xs">{record.userName}</td>
+                                            <td className="px-4 py-2.5 text-indigo-200/70 text-xs">{record.date}</td>
+                                            <td className="px-4 py-2.5 text-indigo-200 text-xs">
+                                                {format(parseISO(record.checkIn), 'HH:mm')}
+                                            </td>
+                                            <td className="px-4 py-2.5 text-indigo-200/70 text-xs">
+                                                {record.checkOut ? format(parseISO(record.checkOut), 'HH:mm') : '-'}
+                                            </td>
+                                            <td className="px-4 py-2.5 text-indigo-200 text-xs font-mono">
+                                                {netDuration}
+                                            </td>
+                                            <td className="px-4 py-2.5">
+                                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium capitalize border ${record.status === 'present'
+                                                    ? 'bg-green-500/10 text-green-400 border-green-500/20'
+                                                    : record.status === 'late'
+                                                        ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20'
+                                                        : 'bg-red-500/10 text-red-400 border-red-500/20'
+                                                    }`}>
+                                                    {record.status === 'present' ? 'Puntual' :
+                                                        record.status === 'late' ? 'Tarde' : 'Ausente'}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-2.5 text-right">
+                                                <button
+                                                    onClick={() => handleEditClick(record)}
+                                                    className="p-1.5 text-indigo-400 hover:text-white hover:bg-indigo-500/20 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                                                    title="Editar Horas"
+                                                >
+                                                    <Edit2 size={14} />
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    )
+                                })
                             )}
                         </tbody>
                     </table>

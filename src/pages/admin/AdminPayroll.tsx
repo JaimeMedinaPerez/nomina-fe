@@ -68,7 +68,16 @@ export function AdminPayroll() {
             if (record.checkIn && record.checkOut) {
                 const start = parseISO(record.checkIn)
                 const end = parseISO(record.checkOut)
-                totalMinutes += differenceInMinutes(end, start)
+                let minutes = differenceInMinutes(end, start)
+
+                if (record.breakStart && record.breakEnd) {
+                    const breakStart = parseISO(record.breakStart)
+                    const breakEnd = parseISO(record.breakEnd)
+                    const breakDuration = differenceInMinutes(breakEnd, breakStart)
+                    minutes -= breakDuration
+                }
+
+                totalMinutes += minutes
             }
         })
 
