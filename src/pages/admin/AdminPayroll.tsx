@@ -2,7 +2,7 @@ import { useAttendanceStore } from '@/store/attendance-store'
 import { usePaymentStore } from '@/store/payment-store'
 import { Check, X, DollarSign, Clock, Trash2 } from 'lucide-react'
 import { useState, useEffect } from 'react'
-import { format, differenceInMinutes, parseISO } from 'date-fns'
+import { format, differenceInMinutes, parseISO, startOfMonth, eachDayOfInterval, isSaturday, isSunday, getDaysInMonth, getDate } from 'date-fns'
 import { api } from '@/lib/api'
 
 export function AdminPayroll() {
@@ -49,64 +49,112 @@ export function AdminPayroll() {
     // User requested to see "Total a Pagar".
     const DEFAULT_SALARY = 1200;
 
-    // 1. Calculate Payroll Logic (Hourly)
-    // iterate over USERS now
-    const payrollList = users.map(u => {
-        // Match by User ID directly
-        const empRecords = records.filter(r =>
-            r.userId.toString() === u.id.toString() &&
-            r.date.startsWith(currentPeriod) &&
-            (r.status === 'present' || r.status === 'late')
-        )
+    // Helper to calculate commercial hours (30-day basis)
+    const getCommercialHoursAdjustment = () => {
+        const now = new Date()
+        const start = startOfMonth(now)
+        const daysInMonth = getDaysInMonth(now)
+        const currentDay = getDate(now)
 
-        // Debug logic to see why it fails
+        // 1. Base: Passed Weekends (Saturdays & Sundays)
+        const daysPassed = eachDayOfInterval({ start, end: now })
+        let automaticHours = 0
 
-
-        // Calculate Total Minutes Worker
-        let totalMinutes = 0
-        empRecords.forEach(record => {
-            if (record.checkIn && record.checkOut) {
-                const start = parseISO(record.checkIn)
-                const end = parseISO(record.checkOut)
-                let minutes = differenceInMinutes(end, start)
-
-                if (record.breakStart && record.breakEnd) {
-                    const breakStart = parseISO(record.breakStart)
-                    const breakEnd = parseISO(record.breakEnd)
-                    const breakDuration = differenceInMinutes(breakEnd, breakStart)
-                    minutes -= breakDuration
-                }
-
-                totalMinutes += minutes
+        daysPassed.forEach(day => {
+            if (isSaturday(day) || isSunday(day)) {
+                automaticHours += 8
             }
         })
 
-        const totalHours = Math.round((totalMinutes / 60) * 100) / 100
+        // 2. Commercial Month Logic (Normalize to 30 Days)
 
-        // Use default salary or try to find one if we ever map it. 
-        // For now, defaulting to 1200 as seen in screenshots.
-        const salary = DEFAULT_SALARY;
-
-        // Formula: Hourly Rate = (Salary / 30) / 8
-        const hourlyRate = (salary / 30) / 8
-        const calculatedPay = Math.round(hourlyRate * totalHours * 100) / 100
-
-        const existingPayment = getPaymentForPeriod(u.id, currentPeriod)
-
-        return {
-            id: u.id,
-            name: u.nombre, // User has 'nombre'
-            email: u.email,
-            position: u.rol ? u.rol.nombre : 'Usuario', // User has 'rol', mapped to 'position' for UI
-            workedRecords: empRecords.length,
-            totalHours,
-            hourlyRate,
-            grossSalary: salary,
-            calculatedPay,
-            status: existingPayment ? 'paid' : 'pending',
-            paymentId: existingPayment?.id
+        // A. February (28 or 29 days) -> Add virtual days to reach 30
+        if (daysInMonth < 30) {
+            // Apply adjustment only if we reached the end of the month
+            // or conservative approach: verify if today >= last day
+            if (currentDay >= daysInMonth) {
+                const missingDays = 30 - daysInMonth
+                automaticHours += (missingDays * 8)
+            }
         }
-    })
+
+        // B. 31-Day Months -> Subtract 1 day (31st) to stay at 30
+        if (daysInMonth === 31) {
+            // If today is the 31st, we subtract 8h to neutralize it
+            if (currentDay === 31) {
+                automaticHours -= 8
+            }
+        }
+
+        return automaticHours
+    }
+
+    const automatedHours = getCommercialHoursAdjustment()
+
+    // 1. Calculate Payroll Logic (Hourly)
+    // iterate over USERS now
+    const payrollList = users
+        .filter(u => {
+            const roleName = u.rol ? u.rol.nombre.toLowerCase() : '';
+            return !roleName.includes('admin');
+        })
+        .map(u => {
+            // Match by User ID directly
+            const empRecords = records.filter(r =>
+                r.userId.toString() === u.id.toString() &&
+                r.date.startsWith(currentPeriod) &&
+                (r.status === 'present' || r.status === 'late')
+            )
+
+            // Debug logic to see why it fails
+
+
+            // Calculate Total Minutes Worker
+            let totalMinutes = 0
+            empRecords.forEach(record => {
+                if (record.checkIn && record.checkOut) {
+                    const start = parseISO(record.checkIn)
+                    const end = parseISO(record.checkOut)
+                    let minutes = differenceInMinutes(end, start)
+
+                    if (record.breakStart && record.breakEnd) {
+                        const breakStart = parseISO(record.breakStart)
+                        const breakEnd = parseISO(record.breakEnd)
+                        const breakDuration = differenceInMinutes(breakEnd, breakStart)
+                        minutes -= breakDuration
+                    }
+
+                    totalMinutes += minutes
+                }
+            })
+
+            const workedHours = Math.round((totalMinutes / 60) * 100) / 100
+            const totalHours = workedHours + automatedHours
+
+            // Use default salary or try to find one if we ever map it. 
+            // For now, defaulting to 1200 as seen in screenshots.
+            const salary = DEFAULT_SALARY;
+
+            // Formula: Hourly Rate = (Salary / 30) / 8
+            const hourlyRate = (salary / 30) / 8
+            const calculatedPay = Math.round(hourlyRate * totalHours * 100) / 100
+
+            const existingPayment = getPaymentForPeriod(u.id, currentPeriod)
+
+            return {
+                id: u.id,
+                name: u.nombre, // User has 'nombre'
+                email: u.email,
+                position: u.rol ? u.rol.nombre : 'Usuario', // User has 'rol', mapped to 'position' for UI
+                workedRecords: empRecords.length,
+                totalHours,
+                hourlyRate,
+                grossSalary: salary,
+                calculatedPay,
+                status: existingPayment ? 'paid' : 'pending',
+                paymentId: existingPayment?.id
+            }
+        })
 
     const totalToPay = payrollList
         .filter(p => p.status === 'pending')

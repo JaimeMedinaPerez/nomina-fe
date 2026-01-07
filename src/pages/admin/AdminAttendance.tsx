@@ -1,6 +1,6 @@
 import { useAttendanceStore, type AttendanceRecord } from '@/store/attendance-store'
 import { useEmployeeStore } from '@/store/employee-store'
-import { format, parseISO } from 'date-fns'
+import { format, parseISO, startOfMonth, eachDayOfInterval, isSaturday, isSunday, isSameDay } from 'date-fns'
 import { Search, Edit2, X, Save, Clock, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useState, useEffect } from 'react'
 
@@ -80,7 +80,52 @@ export function AdminAttendance() {
         setEditingRecord(null)
     }
 
-    const allFilteredRecords = records
+    // --- LOGIC FOR VIRTUAL WEEKEND RECORDS ---
+    const getWeekendRecords = () => {
+        if (!employees || employees.length === 0) return []
+
+        const now = new Date()
+        const start = startOfMonth(now)
+        // Show up to "now" to match payroll calculation
+        const end = now
+
+        const days = eachDayOfInterval({ start, end })
+        const weekendRecords: any[] = []
+
+        employees.forEach(emp => {
+            days.forEach(day => {
+                if (isSaturday(day) || isSunday(day)) {
+                    // Check if this employee already has a REAL record on this date
+                    const hasRealRecord = records.some(r =>
+                        r.userId === emp.id &&
+                        isSameDay(parseISO(r.checkIn), day)
+                    )
+
+                    if (!hasRealRecord) {
+                        // Create Virtual Record
+                        weekendRecords.push({
+                            id: `virt-${emp.id}-${format(day, 'yyyy-MM-dd')}`, // Virtual ID
+                            userId: emp.id,
+                            userName: emp.name,
+                            date: format(day, 'yyyy-MM-dd'),
+                            checkIn: format(day, "yyyy-MM-dd'T'09:00:00"), // Virtual times
+                            checkOut: format(day, "yyyy-MM-dd'T'17:00:00"),
+                            status: 'weekend', // Custom status
+                            isVirtual: true // Flag
+                        })
+                    }
+                }
+            })
+        })
+        return weekendRecords
+    }
+
+    const virtualRecords = getWeekendRecords()
+
+    // Merge Real + Virtual
+    const allRecords = [...records, ...virtualRecords]
+
+    const allFilteredRecords = allRecords
         .filter(r => r.userName.toLowerCase().includes(searchTerm.toLowerCase()))
         .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
 
@@ -176,17 +221,21 @@ export function AdminAttendance() {
                                                     ? 'bg-green-500/10 text-green-400 border-green-500/20'
                                                     : record.status === 'late'
                                                         ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20'
-                                                        : 'bg-red-500/10 text-red-400 border-red-500/20'
+                                                        : record.status === 'weekend'
+                                                            ? 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                                                            : 'bg-red-500/10 text-red-400 border-red-500/20'
                                                     }`}>
                                                     {record.status === 'present' ? 'Puntual' :
-                                                        record.status === 'late' ? 'Tarde' : 'Ausente'}
+                                                        record.status === 'late' ? 'Tarde' :
+                                                            record.status === 'weekend' ? 'Fin de Semana' : 'Ausente'}
                                                 </span>
                                             </td>
                                             <td className="px-4 py-2.5 text-right">
                                                 <button
                                                     onClick={() => handleEditClick(record)}
-                                                    className="p-1.5 text-indigo-400 hover:text-white hover:bg-indigo-500/20 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
-                                                    title="Editar Horas"
+                                                    disabled={record.isVirtual}
+                                                    className={`p-1.5 rounded-lg transition-colors opacity-0 group-hover:opacity-100 ${record.isVirtual ? 'text-gray-600 cursor-not-allowed' : 'text-indigo-400 hover:text-white hover:bg-indigo-500/20'}`}
+                                                    title={record.isVirtual ? 'Registro Automático' : 'Editar Horas'}
                                                 >
                                                     <Edit2 size={14} />
                                                 </button>
